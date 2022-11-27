@@ -20,7 +20,7 @@ RETURNS varchar(max)
 BEGIN
 	DECLARE @id int, @parentid int, @localname varchar(max), @text varchar(max), @gr_count int, @prev int, @gr_max int;
 	DECLARE @ret_value varchar(max);
-	DECLARE xmlnode CURSOR FOR select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc1 WHERE parentid = @parent order by parentid, localname,prev
+	DECLARE xmlnode CURSOR FOR select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc1 WHERE parentid = @parent order by parentid, prev,id
 	OPEN xmlnode
 	FETCH xmlnode INTO @id, @parentid, @gr_count, @localname, @text, @prev, @gr_max
 	IF @gr_count > 1
@@ -94,7 +94,7 @@ AS
 	SELECT @res = CONCAT('{"', @res,'":{',dbo.XMLNodetoJSON2(0, @XmlDoc,0), '}}');
 	Select @res;
 	
-	select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc  order by parentid, localname,prev
+	--select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc  order by parentid, prev,id
 GO
 
-exec XMLtoJSON '<user><name>иван</name><phones><phone>91111</phone><phone>34324</phone></phones></user>';
+exec XMLtoJSON '<user><name>иван</name><family>петров</family><phones><phone>91111</phone><phone>34324</phone></phones></user>';
