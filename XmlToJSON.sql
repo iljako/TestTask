@@ -15,6 +15,7 @@ text varchar(max))
 GO
 */
 
+
 CREATE OR ALTER FUNCTION XMLNodetoJSON2(@parent int, @XmlDoc1 XmlDoc READONLY, @lasttype int) --@lasttype 0-dict, >1-array
 RETURNS varchar(max)	
 BEGIN
@@ -23,6 +24,10 @@ BEGIN
 	DECLARE xmlnode CURSOR FOR select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc1 WHERE parentid = @parent order by parentid, prev,id
 	OPEN xmlnode
 	FETCH xmlnode INTO @id, @parentid, @gr_count, @localname, @text, @prev, @gr_max
+
+	IF ((SELECT count(id) FROM @XmlDoc1 WHERE parentid=@parent)>1 AND (@gr_count = 1))
+		SET @ret_value = CONCAT('{', @ret_value);
+
 	IF @gr_count > 1
 		SET @ret_value = CONCAT('[', @ret_value);
 	WHILE @@FETCH_STATUS = 0
@@ -70,11 +75,11 @@ BEGIN
 		
 		END
 	CLOSE xmlnode
-
+	IF ((SELECT count(id) FROM @XmlDoc1 WHERE parentid=@parent)>1 AND (@gr_count = 1))
+		SET @ret_value = CONCAT(@ret_value,'}');
 	RETURN @ret_value;
 END
 GO
-
 
 CREATE OR ALTER PROCEDURE XMLtoJSON
     @test varchar(max)    
@@ -90,11 +95,25 @@ AS
 	
 	declare @res varchar(max);
 	SET @res = (SELECT localname FROM @XmlDoc Where id = 0);
-	--SELECT @res = CONCAT('{"', @res,'":',dbo.XMLNodetoJSON2(0, @XmlDoc), '}');
-	SELECT @res = CONCAT('{"', @res,'":{',dbo.XMLNodetoJSON2(0, @XmlDoc,0), '}}');
+	SELECT @res = CONCAT('{"', @res,'":',dbo.XMLNodetoJSON2(0, @XmlDoc,0), '}');
 	Select @res;
 	
-	--select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc  order by parentid, prev,id
-GO
+	GO
 
-exec XMLtoJSON '<user><name>иван</name><family>петров</family><phones><phone>91111</phone><phone>34324</phone></phones></user>';
+exec XMLtoJSON '<user><name>иван</name><phones><phone>2222222</phone><phone>1111111</phone></phones></user>';
+
+exec XMLtoJSON '
+<user>
+  <name>иван</name>
+  <phones>
+    <phone>91111</phone>
+    <phone>34324</phone>
+  </phones>
+  <user>
+    <name>иван</name>
+    <phones>
+      <phone>93333</phone>
+      <phone>5555</phone>
+    </phones>
+  </user>
+</user>';
