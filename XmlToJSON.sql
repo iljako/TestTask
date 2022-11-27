@@ -15,7 +15,7 @@ text varchar(max))
 GO
 */
 
-CREATE OR ALTER FUNCTION XMLNodetoJSON2(@parent int, @XmlDoc1 XmlDoc READONLY)
+CREATE OR ALTER FUNCTION XMLNodetoJSON2(@parent int, @XmlDoc1 XmlDoc READONLY, @lasttype int) --@lasttype 0-dict, >1-array
 RETURNS varchar(max)	
 BEGIN
 	DECLARE @id int, @parentid int, @localname varchar(max), @text varchar(max), @gr_count int, @prev int, @gr_max int;
@@ -27,23 +27,41 @@ BEGIN
 		SET @ret_value = CONCAT('[', @ret_value);
 	WHILE @@FETCH_STATUS = 0
 		BEGIN
-			IF @gr_count>0 AND @prev IS NOT NULL
+			IF @prev IS NOT NULL
 				SET @ret_value = CONCAT(@ret_value, ',')
-		
+			
 			IF (Select top 1 id from @XmlDoc1 WHERE text IS NOT NULL AND parentid = @id) IS NOT NULL
 				BEGIN
 					IF @text IS NULL
-					SET @ret_value = CONCAT(@ret_value, '{"',  @localname, '":');
+					BEGIN
+						IF @gr_count > 1
+							SET @ret_value = CONCAT(@ret_value, '{"',  @localname, '":');
+						ELSE
+							SET @ret_value = CONCAT(@ret_value, '"',  @localname, '":');
+					END
+				END
+			ELSE IF (Select top 1 id from @XmlDoc1 WHERE text IS NOT NULL AND parentid = @id) IS NOT NULL
+				BEGIN
+					IF @text IS NULL
+						SET @ret_value = CONCAT(@ret_value, '"',  @localname, '":');
 				END
 			ELSE
 				BEGIN
 					IF @text IS NULL
-						SET @ret_value = CONCAT(@ret_value, '"',  @localname, '":');
+						BEGIN
+							SET @ret_value = CONCAT(@ret_value, '"',  @localname, '":');
+						END
 					ELSE
-						SET @ret_value = CONCAT(@ret_value, '"',  @text, '"}');
-			END
+					BEGIN
+						IF @lasttype > 1
+							SET @ret_value = CONCAT(@ret_value, '"',  @text, '"}');
+						ELSE
+							SET @ret_value = CONCAT(@ret_value, '"',  @text, '"');
+					END
+					
+				END
 
-			SET @ret_value = CONCAT(@ret_value, dbo.XMLNodetoJSON2(@id, @XmlDoc1));
+			SET @ret_value = CONCAT(@ret_value, dbo.XMLNodetoJSON2(@id, @XmlDoc1,@gr_count));
 		
 			if @id = @gr_max and @gr_count > 1
 				SET @ret_value = CONCAT(@ret_value,']');
@@ -56,6 +74,7 @@ BEGIN
 	RETURN @ret_value;
 END
 GO
+
 
 CREATE OR ALTER PROCEDURE XMLtoJSON
     @test varchar(max)    
@@ -71,8 +90,11 @@ AS
 	
 	declare @res varchar(max);
 	SET @res = (SELECT localname FROM @XmlDoc Where id = 0);
-	SELECT @res = CONCAT('{"', @res,'":',dbo.XMLNodetoJSON2(0, @XmlDoc), '}');
+	--SELECT @res = CONCAT('{"', @res,'":',dbo.XMLNodetoJSON2(0, @XmlDoc), '}');
+	SELECT @res = CONCAT('{"', @res,'":{',dbo.XMLNodetoJSON2(0, @XmlDoc,0), '}}');
 	Select @res;
+	
+	select id, parentid, count(localname) OVER (partition by localname, parentid) as gr_count, localname, text, prev,max(id) OVER (partition by localname, parentid) as gr_max from @XmlDoc  order by parentid, localname,prev
 GO
 
-exec XMLtoJSON '<user><name>иван</name><name>иван1</name><phones><phone>91111</phone><phone>34324</phone></phones></user>';
+exec XMLtoJSON '<user><name>иван</name><phones><phone>91111</phone><phone>34324</phone></phones></user>';
